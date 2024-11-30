@@ -1,117 +1,160 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+import React, {useState} from 'react';
 import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
   Text,
-  useColorScheme,
-  View,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  SafeAreaView,
+  Alert,
 } from 'react-native';
+import {isCancel, isInProgress, pick} from 'react-native-document-picker';
+import RNFS from 'react-native-fs';
+import {findCheapestPrice} from './helper/utils';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+type Input = {
+  n: number;
+  edges: number[][];
+  start: number;
+  end: number;
+  expected: number;
+};
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+const App = () => {
+  const [input, setInput] = useState<Input | null>(null);
 
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
+  const handleError = (err: unknown) => {
+    if (isCancel(err)) {
+      Alert.alert('Error', 'User cancelled the picker');
+      // User cancelled the picker, exit any dialogs or menus and move on
+    } else if (isInProgress(err)) {
+      Alert.alert(
+        'Error',
+        'multiple pickers were opened, only the last will be considered',
+      );
+    } else {
+      throw err;
+    }
+  };
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+  const pickDocument = async () => {
+    try {
+      const res = await pick({
+        allowMultiSelection: false,
+        type: ['application/json'],
+      });
+      readDocumentData(res[0].uri);
+    } catch (err) {
+      handleError(err);
+    }
+  };
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+  const readDocumentData = async (uri: string) => {
+    RNFS.readFile(uri, 'ascii')
+      .then(res => {
+        const d = JSON.parse(res);
+        if (
+          !d.hasOwnProperty('n') ||
+          !d.hasOwnProperty('edges') ||
+          !d.hasOwnProperty('start') ||
+          !d.hasOwnProperty('end') ||
+          !d.hasOwnProperty('expected')
+        ) {
+          Alert.alert(
+            'Error',
+            'The selected file does not meet the required format',
+          );
+          return;
+        }
+        setInput(d);
+      })
+      .catch(err => {
+        console.log(err.message, err.code);
+      });
   };
 
   return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Text style={styles.title}>Question Answer App</Text>
+
+        <TouchableOpacity
+          testID="pick-button"
+          style={styles.button}
+          onPress={pickDocument}>
+          <Text style={styles.buttonText}>Upload JSON File</Text>
+        </TouchableOpacity>
+
+        {input && (
+          <Text>
+            Your cheapest price from {input?.start} to {input?.end} is{' '}
+            {findCheapestPrice(
+              input?.n,
+              input?.edges,
+              input?.start,
+              input?.end,
+              input?.expected,
+            )}
+          </Text>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
   },
-  sectionTitle: {
+  scrollContainer: {
+    padding: 20,
+  },
+  title: {
     fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  button: {
+    backgroundColor: '#007AFF',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  buttonText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontSize: 16,
     fontWeight: '600',
   },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
+  card: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  highlight: {
-    fontWeight: '700',
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 5,
+    color: '#333',
+  },
+  content: {
+    fontSize: 16,
+    color: '#666',
+  },
+  error: {
+    color: '#ff3b30',
+    textAlign: 'center',
+    marginTop: 10,
   },
 });
 
